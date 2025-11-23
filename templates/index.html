@@ -119,7 +119,8 @@
             <div class="d-flex align-items-center">
                 <span id="systemStatus" class="me-3 fw-medium"><span
                         class="status-indicator status-running"></span>Sistem Çalışıyor</span>
-                <button id="toggleBtn" class="btn btn-danger btn-sm"><i class="fas fa-stop me-1"></i>Durdur</button>
+                <button id="toggleBtn" class="btn btn-danger btn-sm"><i class="fas fa-power-off me-1"></i>Sistemi
+                    Kapat</button>
             </div>
         </div>
     </nav>
@@ -173,30 +174,21 @@
         const toggleBtn = document.getElementById('toggleBtn');
         const systemStatus = document.getElementById('systemStatus');
 
-        // Toggle System
+        // Toggle System (Shutdown)
         toggleBtn.addEventListener('click', async () => {
-            if (isRunning) {
-                await fetch('/api/stop', { method: 'POST' });
-                isRunning = false;
-                updateStatusUI();
-            } else {
-                await fetch('/api/start', { method: 'POST' });
-                isRunning = true;
-                updateStatusUI();
+            if (confirm("Sistemi tamamen kapatmak istediğinize emin misiniz?")) {
+                try {
+                    await fetch('/api/stop', { method: 'POST' });
+                    toggleBtn.disabled = true;
+                    toggleBtn.innerHTML = '<i class="fas fa-power-off me-1"></i>Kapanıyor...';
+                    systemStatus.innerHTML = '<span class="status-indicator status-stopped"></span>Sistem Kapalı';
+                    isRunning = false;
+                    alert("Sistem kapatılıyor. Tekrar başlatmak için terminalden 'python app.py' komutunu çalıştırın.");
+                } catch (e) {
+                    console.error("Shutdown error:", e);
+                }
             }
         });
-
-        function updateStatusUI() {
-            if (isRunning) {
-                toggleBtn.innerHTML = '<i class="fas fa-stop me-1"></i>Durdur';
-                toggleBtn.className = 'btn btn-danger btn-sm';
-                systemStatus.innerHTML = '<span class="status-indicator status-running"></span>Sistem Çalışıyor';
-            } else {
-                toggleBtn.innerHTML = '<i class="fas fa-play me-1"></i>Başlat';
-                toggleBtn.className = 'btn btn-success btn-sm';
-                systemStatus.innerHTML = '<span class="status-indicator status-stopped"></span>Sistem Durdu';
-            }
-        }
 
         async function fetchListings() {
             // Always fetch to keep UI updated even if scraper is paused (to show existing data)
@@ -277,7 +269,12 @@
         // Check status initially
         fetch('/api/status').then(r => r.json()).then(data => {
             isRunning = data.active;
-            updateStatusUI();
+            console.log("System status:", isRunning ? "Running" : "Stopped");
+        }).catch(() => {
+            console.log("System offline");
+            systemStatus.innerHTML = '<span class="status-indicator status-stopped"></span>Sistem Kapalı';
+            toggleBtn.disabled = true;
+            toggleBtn.innerHTML = '<i class="fas fa-power-off me-1"></i>Sistem Kapalı';
         });
     </script>
 </body>

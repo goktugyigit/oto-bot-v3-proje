@@ -196,6 +196,13 @@ def get_listings():
 def stop_system():
     global SCRAPING_ACTIVE
     SCRAPING_ACTIVE = False
+    
+    def shutdown_server():
+        time.sleep(1)
+        print("Shutting down server...")
+        os._exit(0)
+        
+    threading.Thread(target=shutdown_server).start()
     return jsonify({"status": "stopping"})
 
 @app.route('/api/start', methods=['POST'])
