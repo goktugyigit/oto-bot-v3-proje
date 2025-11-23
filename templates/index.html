@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamermarkt Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .navbar {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .navbar-brand,
+        .nav-link {
+            color: #000000 !important;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-color: #0d6efd;
+        }
+
+        .badge-new {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #dc3545;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            animation: pulse 2s infinite;
+            z-index: 10;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .filter-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-running {
+            background-color: #198754;
+            box-shadow: 0 0 5px #198754;
+        }
+
+        .status-stopped {
+            background-color: #dc3545;
+            box-shadow: 0 0 5px #dc3545;
+        }
+
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#"><i class="fas fa-robot me-2 text-primary"></i>Gamermarkt
+                Scraper</a>
+            <div class="d-flex align-items-center">
+                <span id="systemStatus" class="me-3 fw-medium"><span
+                        class="status-indicator status-running"></span>Sistem Çalışıyor</span>
+                <button id="toggleBtn" class="btn btn-danger btn-sm"><i class="fas fa-stop me-1"></i>Durdur</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="filter-section shadow-sm">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" id="searchInput" class="form-control" placeholder="İlan Ara...">
+                </div>
+                <div class="col-md-3">
+                    <select id="categoryFilter" class="form-select">
+                        <option value="all">Tüm Kategoriler</option>
+                        <option value="Valorant">Valorant</option>
+                        <option value="LoL">League of Legends</option>
+                        <option value="CS2">CS2</option>
+                        <option value="CS2 Item">CS2 Item</option>
+                        <option value="Fortnite">Fortnite</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="sortFilter" class="form-select">
+                        <option value="newest">En Yeni</option>
+                        <option value="priceAsc">Fiyat (Artan)</option>
+                        <option value="priceDesc">Fiyat (Azalan)</option>
+                    </select>
+                </div>
+                <div class="col-md-2 text-end d-flex align-items-center justify-content-end">
+                    <span class="fw-bold text-secondary" id="listingCount">0 İlan</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="listingsGrid" class="row g-4">
+            <!-- Listings will be injected here -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let allListings = [];
+        let initialLoadComplete = false;
+        let initialIds = new Set();
+        let isRunning = true;
+
+        const listingsGrid = document.getElementById('listingsGrid');
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const sortFilter = document.getElementById('sortFilter');
+        const listingCount = document.getElementById('listingCount');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const systemStatus = document.getElementById('systemStatus');
+
+        // Toggle System
+        toggleBtn.addEventListener('click', async () => {
+            if (isRunning) {
+                await fetch('/api/stop', { method: 'POST' });
+                isRunning = false;
+                updateStatusUI();
+            } else {
+                await fetch('/api/start', { method: 'POST' });
+                isRunning = true;
+                updateStatusUI();
+            }
+        });
+
+        function updateStatusUI() {
+            if (isRunning) {
+                toggleBtn.innerHTML = '<i class="fas fa-stop me-1"></i>Durdur';
+                toggleBtn.className = 'btn btn-danger btn-sm';
+                systemStatus.innerHTML = '<span class="status-indicator status-running"></span>Sistem Çalışıyor';
+            } else {
+                toggleBtn.innerHTML = '<i class="fas fa-play me-1"></i>Başlat';
+                toggleBtn.className = 'btn btn-success btn-sm';
+                systemStatus.innerHTML = '<span class="status-indicator status-stopped"></span>Sistem Durdu';
+            }
+        }
+
+        async function fetchListings() {
+            // Always fetch to keep UI updated even if scraper is paused (to show existing data)
+            try {
+                const response = await fetch('/api/listings');
+                const data = await response.json();
+
+                // Check for new items logic
+                if (!initialLoadComplete && data.length > 0) {
+                    data.forEach(item => initialIds.add(item.id));
+                    initialLoadComplete = true;
+                }
+
+                allListings = data;
+                renderListings();
+            } catch (error) {
+                console.error('Error fetching listings:', error);
+            }
+        }
+
+        function renderListings() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const category = categoryFilter.value;
+            const sortBy = sortFilter.value;
+
+            let filtered = allListings.filter(item => {
+                const matchesSearch = item.title.toLowerCase().includes(searchTerm);
+                const matchesCategory = category === 'all' || item.category === category;
+                return matchesSearch && matchesCategory;
+            });
+
+            // Sorting
+            if (sortBy === 'priceAsc') {
+                filtered.sort((a, b) => parseFloat(a.price.replace(/[^0-9.-]+/g, "")) - parseFloat(b.price.replace(/[^0-9.-]+/g, "")));
+            } else if (sortBy === 'priceDesc') {
+                filtered.sort((a, b) => parseFloat(b.price.replace(/[^0-9.-]+/g, "")) - parseFloat(a.price.replace(/[^0-9.-]+/g, "")));
+            } else {
+                // Newest (default order usually, or by timestamp if we had it reliable)
+                filtered.sort((a, b) => b.timestamp - a.timestamp);
+            }
+
+            listingCount.textContent = `${filtered.length} İlan`;
+
+            listingsGrid.innerHTML = filtered.map(item => {
+                const isNew = initialLoadComplete && !initialIds.has(item.id);
+                const newBadge = isNew ? '<span class="badge-new">YENİ!</span>' : '';
+
+                return `
+                    <div class="col-md-6 col-lg-4 col-xl-3">
+                        <div class="card h-100 position-relative">
+                            ${newBadge}
+                            <div class="card-body d-flex flex-column">
+                                <h5 class="card-title text-dark fw-bold mb-3" style="font-size: 1.1rem; line-height: 1.4;">${item.title}</h5>
+                                
+                                <div class="mt-auto">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <span class="text-primary fw-bold fs-5">${item.price}</span>
+                                        <span class="badge bg-light text-dark border">${item.category}</span>
+                                    </div>
+                                    <a href="${item.url}" target="_blank" class="btn btn-outline-primary w-100">İncele</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Event Listeners
+        searchInput.addEventListener('input', renderListings);
+        categoryFilter.addEventListener('change', renderListings);
+        sortFilter.addEventListener('change', renderListings);
+
+        // Initial Poll
+        fetchListings();
+        setInterval(fetchListings, 5000); // Poll every 5 seconds
+
+        // Check status initially
+        fetch('/api/status').then(r => r.json()).then(data => {
+            isRunning = data.active;
+            updateStatusUI();
+        });
+    </script>
+</body>
+
+</html>
